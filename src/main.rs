@@ -1,5 +1,6 @@
 mod server;
+mod handler;
 
 fn main() {
-    server::serve(|request| format!("\n\tRequest: {}, request len: {}\n", request, request.len()));
+    server::serve_incoming();
 }
