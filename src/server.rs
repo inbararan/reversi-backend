@@ -29,7 +29,7 @@ fn serve_single(mut stream: TcpStream) {
             Ok(req) => req
         };
         
-        let response = handler::handle(request);
+        let response = handler::handle_raw(request);
 
         match write_response(&mut stream, &response) {
             Err(e) => { println!("Error while writing: {}", e); break; },
