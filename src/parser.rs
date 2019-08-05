@@ -50,9 +50,9 @@ impl Request {
         let request_type: &str = split.next().expect("Impossible event: First next() of source.split() returned None (Request::parse)");
         match request_type {
             "Start" => Ok(Request::Start),
-            "Move" => {
-                let details = split.next().ok_or(ParsingError::missing("Request::Move::Position", source))?;
-                Ok(Request::Move(Position::parse(details)?))
+            "DoTurn" => {
+                let details = split.next().ok_or(ParsingError::missing("Request::DoTurn::Position", source))?;
+                Ok(Request::DoTurn(Position::parse(details)?))
             },
             "Cancel" => Ok(Request::Cancel),
             _ => Err(ParsingError::unrecognized_request_type(request_type))
@@ -125,33 +125,33 @@ mod tests {
     }
 
     #[test]
-    fn request_test_move() {
-        assert_eq!(Request::parse("Move;2,4"), Ok(Request::Move(Position{x: 2, y: 4})));
+    fn request_test_do_turn() {
+        assert_eq!(Request::parse("DoTurn;2,4"), Ok(Request::DoTurn(Position{x: 2, y: 4})));
     }
 
     #[test]
-    fn request_test_move_no_position() {
-        assert_eq!(Request::parse("Move"), Err(ParsingError::missing("Request::Move::Position", "Move")));
+    fn request_test_do_turn_no_position() {
+        assert_eq!(Request::parse("DoTurn"), Err(ParsingError::missing("Request::DoTurn::Position", "DoTurn")));
     }
 
     #[test]
-    fn request_test_move_position_no_y() {
-        assert_eq!(Request::parse("Move;2"), Err(ParsingError::missing("Position::y", "2")));
+    fn request_test_do_turn_position_no_y() {
+        assert_eq!(Request::parse("DoTurn;2"), Err(ParsingError::missing("Position::y", "2")));
     }
     
     #[test]
-    fn request_test_move_position_empty_x() {
-        assert_eq!(Request::parse("Move;,8"), Err(ParsingError::invalid_number("Position::x", "")));
+    fn request_test_do_turn_position_empty_x() {
+        assert_eq!(Request::parse("DoTurn;,8"), Err(ParsingError::invalid_number("Position::x", "")));
     }
 
     #[test]
-    fn request_test_move_position_empty_y() {
-        assert_eq!(Request::parse("Move;2,"), Err(ParsingError::invalid_number("Position::y", "")));
+    fn request_test_do_turn_position_empty_y() {
+        assert_eq!(Request::parse("DoTurn;2,"), Err(ParsingError::invalid_number("Position::y", "")));
     }
     
     #[test]
-    fn request_test_move_position_wrong_delimiter() {
-        assert_eq!(Request::parse("Move;2.4"), Err(ParsingError::invalid_number("Position::x", "2.4")));
+    fn request_test_do_turn_position_wrong_delimiter() {
+        assert_eq!(Request::parse("DoTurn;2.4"), Err(ParsingError::invalid_number("Position::x", "2.4")));
     }
 
     #[test]

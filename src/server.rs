@@ -1,4 +1,4 @@
-use super::handler;
+use super::handler::Handler;
 
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
@@ -23,13 +23,14 @@ fn write_response(stream: &mut TcpStream, response: &String) -> std::io::Result<
 }
 
 fn serve_single(mut stream: TcpStream) {
+    let mut handler = Handler::new();
     loop {
         let request = match read_request(&mut stream) {
             Err(e) => { println!("Error while reading: {}", e); break; },
             Ok(req) => req
         };
         
-        let response = handler::handle_raw(request);
+        let response = handler.handle_raw(request);
 
         match write_response(&mut stream, &response) {
             Err(e) => { println!("Error while writing: {}", e); break; },
