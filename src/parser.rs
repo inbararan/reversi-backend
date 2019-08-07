@@ -1,5 +1,6 @@
 use super::handler::{Request, Response};
-use super::board::{Position, Cell, Color};
+use super::board::{Tile, Color};
+use super::position::Position;
 
 #[derive(Debug, PartialEq ,Eq)]
 pub struct ParsingError { message: String, token: String}
@@ -66,14 +67,20 @@ impl Position {
     }
 }
 
-impl Cell {
+impl Color {
+    fn stringify(&self) -> &'static str {
+        match self {
+            Color::White => "255.255.255",
+            Color::Black => "0.0.0"
+        }
+    }
+}
+
+impl Tile {
     fn stringify(&self) -> &'static str {
         match &self.0 {
-            Some(color) => match color {
-                Color::White => "255.255.255",
-                Color::Black => "0.0.0"
-            },
-            None => "64.64.64"
+            Some(color) => color.stringify(),
+            None => "128.128.128"
         }
     }
 }
@@ -81,17 +88,17 @@ impl Cell {
 impl Response {
     pub fn stringify(&self) -> String {
         match self {
-            Response::Update(details) => {
-                let mut details_raw = details.iter()
+            Response::Update(summary) => {
+                let mut tiles_raw = summary.tiles.iter()
                                          .map(
-                                             |(pos, cell)| {
-                                                 format!("{}:{}", pos.stringify(), cell.stringify())
+                                             |(pos, tile)| {
+                                                 format!("{}:{}", pos.stringify(), tile.stringify())
                                              })
                                          .fold(String::from(""), |acc, val| {
-                                             acc + &val + ","
+                                             acc + &val + "|"
                                          });
-                if details_raw.len() > 0 { details_raw.pop(); } // Remove last comma if needed
-                format!("Update;{}", details_raw)
+                if tiles_raw.len() > 0 { tiles_raw.pop(); } // Remove last comma if needed
+                format!("Update;{},{}", summary.player.stringify(), tiles_raw)
             },
             Response::Error(details) => {
                 format!("Error;{}", details)
@@ -104,7 +111,8 @@ impl Response {
 mod tests {
     use super::ParsingError;
     use super::super::handler::{Request, Response};
-    use super::super::board::{Position, Cell, Color};
+    use super::super::board::{Tile, Color};
+    use super::super::position::Position;
     use std::collections::HashMap;
 
     #[test]
@@ -156,23 +164,23 @@ mod tests {
 
     #[test]
     fn response_test_update_no_pairs() {
-        let details: HashMap<Position, Cell> = HashMap::new();
+        let details: HashMap<Position, Tile> = HashMap::new();
         assert_eq!(Response::Update(details).stringify(), "Update;")
     }
     #[test]
     fn response_test_update_one_pair() {
-        let mut details: HashMap<Position, Cell> = HashMap::new();
-        details.insert(Position{x: 4, y: 5}, Cell(Some(Color::White)));
+        let mut details: HashMap<Position, Tile> = HashMap::new();
+        details.insert(Position{x: 4, y: 5}, Tile(Some(Color::White)));
         assert_eq!(Response::Update(details).stringify(), "Update;4.5:255.255.255")
     }
     #[test]
     fn response_test_update_two_pairs() {
-        let mut details: HashMap<Position, Cell> = HashMap::new();
-        details.insert(Position{x: 8, y: 5}, Cell(None));
-        details.insert(Position{x: 4, y: 5}, Cell(Some(Color::White)));
+        let mut details: HashMap<Position, Tile> = HashMap::new();
+        details.insert(Position{x: 8, y: 5}, Tile(None));
+        details.insert(Position{x: 4, y: 5}, Tile(Some(Color::White)));
         let actual = Response::Update(details).stringify();
-        let expected1 = "Update;4.5:255.255.255,8.5:64.64.64";
-        let expected2 = "Update;8.5:64.64.64,4.5:255.255.255";
+        let expected1 = "Update;4.5:255.255.255,8.5:128.128.128";
+        let expected2 = "Update;8.5:128.128.128,4.5:255.255.255";
         assert!(actual == expected1 || actual == expected2, "{} isn't equeal to {} nor {}", actual, expected1, expected2);
     }
     #[test]

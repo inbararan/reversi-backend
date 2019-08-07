@@ -1,6 +1,6 @@
 use super::game;
-use super::game::{Game};
-use super::board::{Position, Cell};
+use super::game::Game;
+use super::position::Position;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Request {
@@ -10,7 +10,7 @@ pub enum Request {
 }
 
 pub enum Response {
-    Update(std::collections::HashMap<Position, Cell>),                      /* A board update */
+    Update(game::ChangeSummary),                                            /* A board update */
     Error(String)                                                           /* Unrecoverable error */
 }
 
@@ -47,7 +47,7 @@ impl Handler {
         };
         
         match result {
-            Ok(summary) => Response::Update(summary.0),
+            Ok(summary) => Response::Update(summary),
             Err(error) => Response::Error(error)
         }
     }
