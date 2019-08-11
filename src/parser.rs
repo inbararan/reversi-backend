@@ -88,8 +88,8 @@ impl Tile {
 impl Response {
     pub fn stringify(&self) -> String {
         match self {
-            Response::Update(summary) => {
-                let mut tiles_raw = summary.tiles.iter()
+            Response::Update(change_set) => {
+                let mut tiles_raw = change_set.tiles.iter()
                                          .map(
                                              |(pos, tile)| {
                                                  format!("{}:{}", pos.stringify(), tile.stringify())
@@ -98,7 +98,7 @@ impl Response {
                                              acc + &val + "|"
                                          });
                 if tiles_raw.len() > 0 { tiles_raw.pop(); } // Remove last comma if needed
-                format!("Update;{},{}", summary.player.stringify(), tiles_raw)
+                format!("Update;{},{}", change_set.player.stringify(), tiles_raw)
             },
             Response::Error(details) => {
                 format!("Error;{}", details)
@@ -111,6 +111,7 @@ impl Response {
 mod tests {
     use super::ParsingError;
     use super::super::handler::{Request, Response};
+    use super::super::game::ChangeSet;
     use super::super::board::{Tile, Color};
     use super::super::position::Position;
     use std::collections::HashMap;
@@ -164,23 +165,23 @@ mod tests {
 
     #[test]
     fn response_test_update_no_pairs() {
-        let details: HashMap<Position, Tile> = HashMap::new();
-        assert_eq!(Response::Update(details).stringify(), "Update;")
+        let tiles: HashMap<Position, Tile> = HashMap::new();
+        assert_eq!(Response::Update(ChangeSet{tiles: tiles, player: Color::Black}).stringify(), "Update;0.0.0,")
     }
     #[test]
     fn response_test_update_one_pair() {
-        let mut details: HashMap<Position, Tile> = HashMap::new();
-        details.insert(Position{x: 4, y: 5}, Tile(Some(Color::White)));
-        assert_eq!(Response::Update(details).stringify(), "Update;4.5:255.255.255")
+        let mut tiles: HashMap<Position, Tile> = HashMap::new();
+        tiles.insert(Position{x: 4, y: 5}, Tile(Some(Color::White)));
+        assert_eq!(Response::Update(ChangeSet{tiles: tiles, player: Color::White}).stringify(), "Update;255.255.255,4.5:255.255.255")
     }
     #[test]
     fn response_test_update_two_pairs() {
-        let mut details: HashMap<Position, Tile> = HashMap::new();
-        details.insert(Position{x: 8, y: 5}, Tile(None));
-        details.insert(Position{x: 4, y: 5}, Tile(Some(Color::White)));
-        let actual = Response::Update(details).stringify();
-        let expected1 = "Update;4.5:255.255.255,8.5:128.128.128";
-        let expected2 = "Update;8.5:128.128.128,4.5:255.255.255";
+        let mut tiles: HashMap<Position, Tile> = HashMap::new();
+        tiles.insert(Position{x: 8, y: 5}, Tile(None));
+        tiles.insert(Position{x: 4, y: 5}, Tile(Some(Color::White)));
+        let actual = Response::Update(ChangeSet{tiles: tiles, player: Color::Black}).stringify();
+        let expected1 = "Update;0.0.0,4.5:255.255.255|8.5:128.128.128";
+        let expected2 = "Update;0.0.0,8.5:128.128.128|4.5:255.255.255";
         assert!(actual == expected1 || actual == expected2, "{} isn't equeal to {} nor {}", actual, expected1, expected2);
     }
     #[test]

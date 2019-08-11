@@ -10,7 +10,7 @@ pub enum Request {
 }
 
 pub enum Response {
-    Update(game::ChangeSummary),                                            /* A board update */
+    Update(game::ChangeSet),                                            /* A board update */
     Error(String)                                                           /* Unrecoverable error */
 }
 
@@ -23,31 +23,22 @@ impl Handler {
         Handler{ game: None }
     }
 
-    fn summary_of(&mut self, task: impl Fn(&mut Game)->game::Result) -> Result<game::ChangeSummary, String> {
-        self.game.as_mut().map_or(Err(String::from("No game is running")), |game| {
-            match task(game) {
-                Ok(()) => Ok(game.flush_changes()),
-                Err(e) => {
-                    game.discard_changes();
-                    Err(e)
-                }
-            }
-            
-        })
+    fn result_of(&mut self, task: impl Fn(&mut Game)->game::Result) -> Result<game::ChangeSet, String> {
+        self.game.as_mut().map_or(Err(String::from("No game is running")), task)
     }
 
     fn handle_parsed(&mut self, request: Request) -> Response {
         let result = match request {
             Request::Start => {
                 self.game = Some(Game::new());
-                self.summary_of(|game| game.prepare_board())
+                self.result_of(|game| game.start())
             },
-            Request::DoTurn(position) => self.summary_of(|game| game.do_turn(position)),
-            Request::Cancel => self.summary_of(|game| game.cancel())
+            Request::DoTurn(position) => self.result_of(|game| game.do_turn(position)),
+            Request::Cancel => self.result_of(|game| game.cancel())
         };
         
         match result {
-            Ok(summary) => Response::Update(summary),
+            Ok(change_set) => Response::Update(change_set),
             Err(error) => Response::Error(error)
         }
     }

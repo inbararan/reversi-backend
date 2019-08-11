@@ -1,69 +1,97 @@
 use super::board::{Board, Tile, Color};
 use super::position::{Position, Direction};
+use std::collections::HashMap;
 
-enum Change {
-    Color(Position, Color),
-    Unset(Position),
-    Player
+/*
+This struct is used in a doubled role. It represents a "hard" set of changes, non-regarding the previous game state
+The two roles are:
+1. As a return value to send the front-end - which doesn't know anything about the values.
+2. As a saved information in order to recreate previous states - as it's created anyway, and makes revoke_changes somewhat easier to implement
+*/
+pub struct ChangeSet {
+    pub tiles: HashMap<Position, Tile>,
+    pub player: Color
 }
+
+struct ChangeLog {
+    pending_tile_changes: Vec<Position>,            /* List of pending tiles to change */
+    pending_player_change: bool,               
+    history: Vec<ChangeSet>                         /* A stack where each item is a list of changes, reversing one set of changes */
+}
+
+impl ChangeLog {
+    pub fn new() -> ChangeLog {
+        ChangeLog {
+            pending_tile_changes: Vec::new(),
+            pending_player_change: false,
+            history: Vec::new()
+        }
+    }
+
+    pub fn push_tile_change(&mut self, position: Position) {
+        self.pending_tile_changes.push(position);
+    }
+    pub fn push_player_change(&mut self) {
+        self.pending_player_change = !self.pending_player_change;
+    }
+    
+    pub fn discard_changes(&mut self) {
+        self.pending_tile_changes.clear();
+        self.pending_player_change = false;
+    }
+}
+
+pub type Result = std::result::Result<ChangeSet, String>;
 
 pub struct Game {
     board: Board,
     current_player: Color,
-    changes: Vec<Change>
+    change_log: ChangeLog
 }
-
-pub struct ChangeSummary {
-    pub tiles: std::collections::HashMap<Position, Tile>,
-    pub player: Color
-}
-
-pub type Result = std::result::Result<(()), String>;
 
 impl Game {
     pub fn new() -> Game {
-        Game{ board: Board::new(10, 10), current_player: Color::Black, changes: vec![] }
+        Game{ board: Board::new(10, 10), current_player: Color::Black, change_log: ChangeLog::new() }
     }
 
-    pub fn flush_changes(&mut self) -> ChangeSummary {
-        let mut tiles: std::collections::HashMap<Position, Tile> = std::collections::HashMap::new();
-        for change in self.changes.iter() {
-            match change {
-                Change::Color(pos, col) => {
-                    self.board.set(pos, col);
-                    tiles.insert(*pos, Tile(Some(*col)));
-                },
-                Change::Unset(pos) => {
-                    self.board.unset(pos);
-                    tiles.insert(*pos, Tile(None));
-                },
-                Change::Player => {
-                    self.current_player = self.current_player.opposite();
-                }
-            }
+    fn error(&mut self, message: &'static str) -> Result {
+        self.change_log.discard_changes();
+        Err(String::from(message))
+    }
+
+    fn flush_changes(&mut self) -> ChangeSet {
+        let mut tiles: HashMap<Position, Tile> = HashMap::new();
+        let mut history_tiles: HashMap<Position, Tile> = HashMap::new();
+        let history_player = self.current_player;
+
+        for pos in self.change_log.pending_tile_changes.iter() {
+            history_tiles.insert(*pos, self.board.get(pos));
+            self.board.set(pos, &self.current_player);
+            tiles.insert(*pos, self.board.get(pos));
         }
-        self.discard_changes();
+        if self.change_log.pending_player_change { self.current_player = self.current_player.opposite() }
 
-        ChangeSummary {
-            tiles: tiles,
-            player: self.current_player
-        }
+        self.change_log.history.push(ChangeSet { tiles: history_tiles, player: history_player });
+        
+        self.change_log.discard_changes();
+
+        ChangeSet { tiles: tiles, player: self.current_player }
     }
 
-    pub fn discard_changes(&mut self) {
-        self.changes = vec![];
-    }
-
-    pub fn prepare_board(&mut self) -> Result {
+    pub fn start(&mut self) -> Result {
         for pos in self.board.iter_all_positions() {
-            self.changes.push(Change::Unset(pos))
+            self.board.unset(&pos);
         }
-        self.changes.push(Change::Color(Position{x: 4, y: 4}, Color::White));
-        self.changes.push(Change::Color(Position{x: 4, y: 5}, Color::Black));
-        self.changes.push(Change::Color(Position{x: 5, y: 4}, Color::Black));
-        self.changes.push(Change::Color(Position{x: 5, y: 5}, Color::White));
+        self.board.set(&Position{x: 4, y: 4}, &Color::White);
+        self.board.set(&Position{x: 4, y: 5}, &Color::Black);
+        self.board.set(&Position{x: 5, y: 4}, &Color::Black);
+        self.board.set(&Position{x: 5, y: 5}, &Color::White);
 
-        Ok(())
+        let tiles: HashMap<Position, Tile> = self.board.iter_all_positions()
+                                                 .map(|pos| (pos, self.board.get(&pos)))
+                                                 
+                                                 .collect();
+        Ok(ChangeSet { tiles: tiles, player: self.current_player })
     }
 
     pub fn flip_vector(&self, position: &Position, direction: &Direction) -> Option<Vec<Position>> {
@@ -82,20 +110,16 @@ impl Game {
                                 current = pos.advance(direction, &self.board.size);
                             }
                         },
-                        None => {
-                            return None;
-                        }
+                        None => { return None; }
                     }
                 },
-                None => {
-                    return None;
-                }
+                None => { return None; }
             }
         }
     }
 
     pub fn do_turn(&mut self, position: Position) -> Result {
-        if self.board.taken(&position) { return Err(String::from("Position already taken")); }
+        if self.board.taken(&position) { return self.error("Position already taken"); }
         
         let flip_positions = Direction::iter_all()
                                        .filter_map(|direction|
@@ -103,18 +127,18 @@ impl Game {
                                        )
                                        .flatten()
                                        .collect::<Vec<Position>>();
-        if flip_positions.is_empty() { return Err(String::from("You must flip at least one tile")); }
+        if flip_positions.is_empty() { return self.error("You must flip at least one tile"); }
         
         for pos in flip_positions.into_iter() {
-            self.changes.push(Change::Color(pos, self.current_player.clone()));
+            self.change_log.push_tile_change(pos);
         }
-        self.changes.push(Change::Color(position, self.current_player.clone()));
-        self.changes.push(Change::Player);
+        self.change_log.push_tile_change(position);
+        self.change_log.push_player_change();
 
-        Ok(())
+        Ok(self.flush_changes())
     }
 
     pub fn cancel(&mut self) -> Result {
-        Err(String::from("Unimplemented"))
+        self.error("Unimplemented")
     }
 }
