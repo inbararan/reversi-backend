@@ -1,5 +1,5 @@
 use super::board::{Board, Tile, Color};
-use super::position::{Position, Direction};
+use super::position::Position;
 use std::collections::HashMap;
 
 /*
@@ -51,7 +51,13 @@ pub struct Game {
 
 impl Game {
     pub fn new() -> Game {
-        Game{ board: Board::new(10, 10), current_player: Color::Black, change_log: ChangeLog::new() }
+        let mut board = Board::new(10, 10);
+        board.set(&Position{x: 4, y: 4}, &Color::White);
+        board.set(&Position{x: 4, y: 5}, &Color::Black);
+        board.set(&Position{x: 5, y: 4}, &Color::Black);
+        board.set(&Position{x: 5, y: 5}, &Color::White);
+
+        Game{ board: board, current_player: Color::Black, change_log: ChangeLog::new() }
     }
 
     fn error(&mut self, message: &'static str) -> Result {
@@ -78,55 +84,33 @@ impl Game {
         ChangeSet { tiles: tiles, player: self.current_player }
     }
 
-    pub fn start(&mut self) -> Result {
-        for pos in self.board.iter_all_positions() {
-            self.board.unset(&pos);
+    fn revoke_changes(&mut self) -> Option<ChangeSet> {
+        let change_set = self.change_log.history.pop()?;
+        
+        for (pos, tile) in change_set.tiles.iter() {
+            match tile.0 {
+                Some(color) => self.board.set(pos, &color),
+                None => self.board.unset(pos)
+            }
         }
-        self.board.set(&Position{x: 4, y: 4}, &Color::White);
-        self.board.set(&Position{x: 4, y: 5}, &Color::Black);
-        self.board.set(&Position{x: 5, y: 4}, &Color::Black);
-        self.board.set(&Position{x: 5, y: 5}, &Color::White);
+        self.current_player = change_set.player;
 
-        let tiles: HashMap<Position, Tile> = self.board.iter_all_positions()
-                                                 .map(|pos| (pos, self.board.get(&pos)))
-                                                 
-                                                 .collect();
-        Ok(ChangeSet { tiles: tiles, player: self.current_player })
+        Some(change_set)
     }
 
-    pub fn flip_vector(&self, position: &Position, direction: &Direction) -> Option<Vec<Position>> {
-        let mut current = position.advance(direction, &self.board.size);
-        let mut flip_vector: Vec<Position> = Vec::new();
-        loop {
-            match current {
-                Some(pos) => {
-                    match self.board.get(&pos).0 {
-                        Some(color) => {
-                            if color == self.current_player {
-                                return if flip_vector.is_empty() { None } else { Some(flip_vector) }
-                            } else {
-                                flip_vector.push(pos);
-                                println!("flipping: {},{}", pos.x, pos.y);
-                                current = pos.advance(direction, &self.board.size);
-                            }
-                        },
-                        None => { return None; }
-                    }
-                },
-                None => { return None; }
-            }
+    pub fn summary(&self) -> ChangeSet {
+        ChangeSet{
+            tiles: self.board.iter_all_positions()
+                       .map(|pos| (pos, self.board.get(&pos)))
+                       .collect(),
+            player: self.current_player
         }
     }
 
     pub fn do_turn(&mut self, position: Position) -> Result {
         if self.board.taken(&position) { return self.error("Position already taken"); }
         
-        let flip_positions = Direction::iter_all()
-                                       .filter_map(|direction|
-                                           self.flip_vector(&position, direction)
-                                       )
-                                       .flatten()
-                                       .collect::<Vec<Position>>();
+        let flip_positions = self.board.calculate_flip_positions(&position, &self.current_player);
         if flip_positions.is_empty() { return self.error("You must flip at least one tile"); }
         
         for pos in flip_positions.into_iter() {
@@ -139,6 +123,9 @@ impl Game {
     }
 
     pub fn cancel(&mut self) -> Result {
-        self.error("Unimplemented")
+        match self.revoke_changes() {
+            Some(change_set) => Ok(change_set),
+            None => self.error("No more moves to cancel")
+        }
     }
 }

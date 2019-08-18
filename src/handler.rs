@@ -10,7 +10,7 @@ pub enum Request {
 }
 
 pub enum Response {
-    Update(game::ChangeSet),                                            /* A board update */
+    Update(game::ChangeSet),                                                /* A board update */
     Error(String)                                                           /* Unrecoverable error */
 }
 
@@ -31,7 +31,7 @@ impl Handler {
         let result = match request {
             Request::Start => {
                 self.game = Some(Game::new());
-                self.result_of(|game| game.start())
+                Ok(self.game.as_ref().unwrap().summary())
             },
             Request::DoTurn(position) => self.result_of(|game| game.do_turn(position)),
             Request::Cancel => self.result_of(|game| game.cancel())
